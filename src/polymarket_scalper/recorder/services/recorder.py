@@ -317,6 +317,12 @@ class RecorderService:
         self.logger.warning("initial_underlying_data_timeout")
 
     async def _persist_available_underlying_ticks(self) -> int:
+        # RTDS ticks are persisted on websocket receipt in
+        # `handle_underlying_price_message()`. Re-reading the cached latest tick
+        # here would double-write the same `(asset, timestamp, provider)` tuple.
+        if isinstance(self.price_feed, PolymarketRtdsPriceFeed):
+            return 0
+
         written = 0
         for asset in self.settings.supported_assets:
             tick = self.price_feed.latest_tick(asset)
