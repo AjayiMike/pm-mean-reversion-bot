@@ -27,6 +27,10 @@ export DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/polyma
 make db-migrate
 ```
 
+Alembic now prefers `DATABASE_URL` from the environment, so the same migration flow
+works in both local and containerized environments as long as the host is correct for
+that runtime.
+
 5. Run the recorder once:
 
 ```bash
@@ -58,6 +62,12 @@ Run PostgreSQL:
 
 ```bash
 make db-up
+```
+
+Run migrations inside Docker:
+
+```bash
+docker compose run --rm -e DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/polymarket_scalper app python -m alembic upgrade head
 ```
 
 Run the recorder in Docker:

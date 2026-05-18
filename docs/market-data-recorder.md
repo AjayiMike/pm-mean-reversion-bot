@@ -125,11 +125,16 @@ make db-migrate
 APP_MODE=record make record
 ```
 
+Alembic resolves the database URL from `DATABASE_URL` first, so local runs can keep
+using `localhost` while Docker and remote deployments can point at the Compose service
+name instead.
+
 ## Run With Docker
 
 ```bash
 cp .env.example .env
 docker compose up -d postgres
+docker compose run --rm -e DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/polymarket_scalper app python -m alembic upgrade head
 docker compose run --rm recorder
 docker compose run --rm test
 ```

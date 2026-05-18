@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
@@ -17,8 +18,14 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    return context.get_x_argument(as_dictionary=True).get("db_url") or config.get_main_option(
-        "sqlalchemy.url"
+    # URL precedence is explicit by design:
+    # 1. `-x db_url=...` for one-off overrides
+    # 2. `DATABASE_URL` from the process environment for container/runtime parity
+    # 3. `alembic.ini` as the local-development fallback
+    return (
+        context.get_x_argument(as_dictionary=True).get("db_url")
+        or os.getenv("DATABASE_URL")
+        or config.get_main_option("sqlalchemy.url")
     )
 
 

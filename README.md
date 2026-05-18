@@ -51,6 +51,9 @@ For Phase 2, set:
 - `DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/polymarket_scalper` for local host usage
 - or keep the compose default host `postgres` when running inside Docker
 
+Alembic prefers `DATABASE_URL` from the environment, so `make db-migrate` works in
+both local and containerized environments when that host value matches the runtime.
+
 ## Commands
 
 ```bash
@@ -70,6 +73,7 @@ make docker-test
 
 ```bash
 docker compose up -d postgres
+docker compose run --rm -e DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/polymarket_scalper app python -m alembic upgrade head
 docker compose run --rm recorder
 docker compose run --rm test
 ```
