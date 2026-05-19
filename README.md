@@ -48,7 +48,8 @@ cp .env.example .env
 
 For Phase 2, set:
 - `APP_MODE=record`
-- `DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/polymarket_scalper` for local host usage
+- `POSTGRES_PASSWORD` to a strong unique value before starting Docker Compose
+- `DATABASE_URL=postgresql+psycopg://postgres:<password>@localhost:5432/polymarket_scalper` for local host usage
 - or keep the compose default host `postgres` when running inside Docker
 
 Alembic prefers `DATABASE_URL` from the environment, so `make db-migrate` works in
@@ -73,10 +74,15 @@ make docker-test
 
 ```bash
 docker compose up -d postgres
-docker compose run --rm -e DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/polymarket_scalper app python -m alembic upgrade head
+docker compose run --rm app python -m alembic upgrade head
 docker compose run --rm recorder
 docker compose run --rm test
 ```
+
+Security note:
+- do not publish PostgreSQL on a public host port in production
+- connect to the database through Docker's internal network or an SSH tunnel
+- never leave `postgres/postgres` credentials in a public deployment
 
 ## Phase Gate
 

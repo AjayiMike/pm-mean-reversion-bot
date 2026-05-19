@@ -23,7 +23,7 @@ make db-up
 4. Run migrations:
 
 ```bash
-export DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/polymarket_scalper
+export DATABASE_URL=postgresql+psycopg://postgres:<password>@localhost:5432/polymarket_scalper
 make db-migrate
 ```
 
@@ -67,7 +67,7 @@ make db-up
 Run migrations inside Docker:
 
 ```bash
-docker compose run --rm -e DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/polymarket_scalper app python -m alembic upgrade head
+docker compose run --rm app python -m alembic upgrade head
 ```
 
 Run the recorder in Docker:
@@ -134,7 +134,7 @@ If config validation fails:
 For local or simple server-side backup:
 
 ```bash
-pg_dump postgresql://postgres:postgres@localhost:5432/polymarket_scalper > recorder_backup.sql
+pg_dump postgresql://postgres:<password>@localhost:5432/polymarket_scalper > recorder_backup.sql
 ```
 
 ## Simple DigitalOcean Path
@@ -144,3 +144,8 @@ Keep deployment simple in Phase 2:
 - Docker and Docker Compose
 - server-side `.env`
 - PostgreSQL either in Compose or upgraded later to managed PostgreSQL only when justified
+
+Production guardrails:
+- keep PostgreSQL off the public internet
+- use a strong `POSTGRES_PASSWORD`
+- access the database through SSH tunneling if manual inspection is needed
