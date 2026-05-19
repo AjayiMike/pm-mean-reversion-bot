@@ -147,5 +147,6 @@ Keep deployment simple in Phase 2:
 
 Production guardrails:
 - keep PostgreSQL off the public internet
+- if you need DBeaver or psql access from your laptop, bind PostgreSQL to `127.0.0.1:5432` on the server and use SSH tunneling
 - use a strong `POSTGRES_PASSWORD`
 - access the database through SSH tunneling if manual inspection is needed

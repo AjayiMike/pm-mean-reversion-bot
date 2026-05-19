@@ -81,6 +81,7 @@ docker compose run --rm test
 
 Security note:
 - do not publish PostgreSQL on a public host port in production
+- binding PostgreSQL to `127.0.0.1:5432` on the server is acceptable when access is only through an SSH tunnel
 - connect to the database through Docker's internal network or an SSH tunnel
 - never leave `postgres/postgres` credentials in a public deployment
 
