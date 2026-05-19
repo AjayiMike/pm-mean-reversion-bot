@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 from polymarket_scalper.config.settings import AppSettings
 from polymarket_scalper.domain.enums import AssetSymbol
@@ -49,3 +50,26 @@ def test_persist_available_underlying_ticks_uses_cached_ticks_for_mock_feed() ->
     assert written == len(settings.supported_assets)
     assert [tick.asset for tick in persisted] == settings.supported_assets
     assert service.last_underlying_price_tick_time is not None
+
+
+def test_describe_exception_includes_type_when_message_is_empty() -> None:
+    settings = AppSettings(app_mode="record", database_url="sqlite:///:memory:")
+    service = RecorderService(settings)
+
+    exc = TimeoutError()
+
+    assert service._describe_exception(exc) == "TimeoutError"
+
+
+def test_refresh_market_subscriptions_if_needed_keeps_running_on_refresh_failure() -> None:
+    settings = AppSettings(app_mode="record", database_url="sqlite:///:memory:")
+    service = RecorderService(settings)
+    service._active_market_signature = ("market-1",)
+    service.last_market_refresh_time = None
+    service.refresh_markets = AsyncMock(side_effect=TimeoutError())  # type: ignore[method-assign]
+
+    sentinel_task = object()
+
+    result = asyncio.run(service._refresh_market_subscriptions_if_needed(sentinel_task))  # type: ignore[arg-type]
+
+    assert result is sentinel_task

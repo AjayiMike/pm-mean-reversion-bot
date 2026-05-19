@@ -193,7 +193,7 @@ class RecorderService:
         except BaseException as exc:
             is_interrupted = isinstance(exc, (KeyboardInterrupt, asyncio.CancelledError))
             status = "interrupted" if is_interrupted else "failed"
-            error_message = None if status == "interrupted" else str(exc)
+            error_message = None if status == "interrupted" else self._describe_exception(exc)
             self._finalize_run(status, error_message=error_message)
             raise
         else:
@@ -229,6 +229,12 @@ class RecorderService:
 
     def request_shutdown(self, reason: str) -> None:
         self._shutdown_reason = reason
+
+    def _describe_exception(self, exc: BaseException) -> str:
+        message = str(exc).strip()
+        if message:
+            return f"{exc.__class__.__name__}: {message}"
+        return exc.__class__.__name__
 
     async def run_loop(self, stop_event: asyncio.Event | None = None) -> None:
         async with self.recorder_run():
@@ -380,7 +386,14 @@ class RecorderService:
             return market_ws_task
 
         previous_signature = self._active_market_signature
-        markets = await self.refresh_markets()
+        try:
+            markets = await self.refresh_markets()
+        except Exception as exc:  # noqa: BLE001
+            self.logger.warning(
+                "market_refresh_failed",
+                extra={"error": self._describe_exception(exc)},
+            )
+            return market_ws_task
         new_signature = self._market_signature(markets)
         if new_signature == previous_signature:
             return market_ws_task
