@@ -56,6 +56,7 @@ class RecorderService:
         self.last_market_refresh_time: datetime | None = None
         self.last_polymarket_message_time: datetime | None = None
         self.last_underlying_price_tick_time: datetime | None = None
+        self.last_underlying_message_received_at: datetime | None = None
         self.snapshots_written = 0
         self._run_id: int | None = None
         self._active_market_signature: tuple[str, ...] = ()
@@ -108,6 +109,7 @@ class RecorderService:
             tick = self.price_feed.handle_message(message)
             if tick is None:
                 return
+            self.last_underlying_message_received_at = datetime.now(UTC)
             self._persist_underlying_tick(tick)
             self.last_underlying_price_tick_time = tick.timestamp
 
@@ -261,6 +263,7 @@ class RecorderService:
                             extra={"reason": self._shutdown_reason},
                         )
                         break
+                    self._ensure_underlying_feed_is_fresh()
                     market_ws_task = await self._refresh_market_subscriptions_if_needed(
                         market_ws_task
                     )
@@ -349,6 +352,33 @@ class RecorderService:
                 session.commit()
             except IntegrityError:
                 session.rollback()
+
+    def _ensure_underlying_feed_is_fresh(self) -> None:
+        if not isinstance(self.price_feed, PolymarketRtdsPriceFeed):
+            return
+        if self.last_underlying_message_received_at is None:
+            return
+
+        age_seconds = (
+            datetime.now(UTC) - self.last_underlying_message_received_at
+        ).total_seconds()
+        if age_seconds <= self.settings.recorder_underlying_stale_after_seconds:
+            return
+
+        self.logger.error(
+            "underlying_feed_stale",
+            extra={
+                "age_seconds": round(age_seconds, 3),
+                "stale_after_seconds": self.settings.recorder_underlying_stale_after_seconds,
+                "last_tick_timestamp": (
+                    self.last_underlying_price_tick_time.isoformat()
+                    if self.last_underlying_price_tick_time is not None
+                    else None
+                ),
+                "last_received_at": self.last_underlying_message_received_at.isoformat(),
+            },
+        )
+        raise RuntimeError("underlying RTDS feed stalled")
 
     def _market_token_ids(self, markets: list[DiscoveredMarket]) -> list[str]:
         return [

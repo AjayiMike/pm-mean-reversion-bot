@@ -63,6 +63,7 @@ class AppSettings(BaseSettings):
 
     recorder_snapshot_interval_seconds: int = Field(default=1, gt=0)
     recorder_market_refresh_interval_seconds: int = Field(default=60, gt=0)
+    recorder_underlying_stale_after_seconds: int = Field(default=120, gt=0)
     recorder_max_markets_per_asset: int = Field(default=1, ge=1)
     recorder_write_raw_payloads: bool = True
     recorder_underlying_price_provider: str = "polymarket_rtds"
@@ -181,6 +182,9 @@ class AppSettings(BaseSettings):
             "recorder_snapshot_interval_seconds": self.recorder_snapshot_interval_seconds,
             "recorder_market_refresh_interval_seconds": (
                 self.recorder_market_refresh_interval_seconds
+            ),
+            "recorder_underlying_stale_after_seconds": (
+                self.recorder_underlying_stale_after_seconds
             ),
             "recorder_max_markets_per_asset": self.recorder_max_markets_per_asset,
             "builder_credentials_configured": all(
