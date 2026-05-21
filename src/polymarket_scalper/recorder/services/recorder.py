@@ -31,6 +31,7 @@ INITIAL_UNDERLYING_DATA_WAIT_SECONDS = 3.0
 FRONTEND_RECONCILIATION_INTERVAL_SECONDS = 15.0
 FRONTEND_RECONCILIATION_LOOKBACK = timedelta(minutes=30)
 SHUTDOWN_FRONTEND_RECONCILIATION_TIMEOUT_SECONDS = 15.0
+UNDERLYING_RECOVERY_WAIT_SECONDS = 10.0
 
 
 class RecorderService:
@@ -57,6 +58,7 @@ class RecorderService:
         self.last_polymarket_message_time: datetime | None = None
         self.last_underlying_price_tick_time: datetime | None = None
         self.last_underlying_message_received_at: datetime | None = None
+        self._underlying_recovery_attempted_at: datetime | None = None
         self.snapshots_written = 0
         self._run_id: int | None = None
         self._active_market_signature: tuple[str, ...] = ()
@@ -263,7 +265,7 @@ class RecorderService:
                             extra={"reason": self._shutdown_reason},
                         )
                         break
-                    self._ensure_underlying_feed_is_fresh()
+                    await self._ensure_underlying_feed_is_fresh()
                     market_ws_task = await self._refresh_market_subscriptions_if_needed(
                         market_ws_task
                     )
@@ -347,13 +349,26 @@ class RecorderService:
     def _persist_underlying_tick(self, tick) -> None:
         with self.db.session() as session:
             repo = RecorderRepository(session)
-            repo.insert_underlying_price_tick(tick, self.settings.recorder_write_raw_payloads)
+            inserted = repo.insert_underlying_price_tick(
+                tick,
+                self.settings.recorder_write_raw_payloads,
+            )
             try:
                 session.commit()
             except IntegrityError:
                 session.rollback()
+                inserted = False
+        if not inserted:
+            self.logger.info(
+                "underlying_tick_duplicate_ignored",
+                extra={
+                    "asset": tick.asset.value,
+                    "timestamp": tick.timestamp.isoformat(),
+                    "provider": tick.provider,
+                },
+            )
 
-    def _ensure_underlying_feed_is_fresh(self) -> None:
+    async def _ensure_underlying_feed_is_fresh(self) -> None:
         if not isinstance(self.price_feed, PolymarketRtdsPriceFeed):
             return
         if self.last_underlying_message_received_at is None:
@@ -363,6 +378,9 @@ class RecorderService:
             datetime.now(UTC) - self.last_underlying_message_received_at
         ).total_seconds()
         if age_seconds <= self.settings.recorder_underlying_stale_after_seconds:
+            return
+
+        if await self._recover_underlying_feed():
             return
 
         self.logger.error(
@@ -379,6 +397,56 @@ class RecorderService:
             },
         )
         raise RuntimeError("underlying RTDS feed stalled")
+
+    async def _recover_underlying_feed(self) -> bool:
+        if not isinstance(self.price_feed, PolymarketRtdsPriceFeed):
+            return False
+
+        recovery_started_at = datetime.now(UTC)
+        self._underlying_recovery_attempted_at = recovery_started_at
+        self.logger.warning(
+            "underlying_feed_recovery_started",
+            extra={
+                "last_tick_timestamp": (
+                    self.last_underlying_price_tick_time.isoformat()
+                    if self.last_underlying_price_tick_time is not None
+                    else None
+                ),
+                "last_received_at": (
+                    self.last_underlying_message_received_at.isoformat()
+                    if self.last_underlying_message_received_at is not None
+                    else None
+                ),
+            },
+        )
+
+        await self.price_feed.disconnect()
+        await self.price_feed.connect()
+
+        deadline = asyncio.get_running_loop().time() + UNDERLYING_RECOVERY_WAIT_SECONDS
+        while asyncio.get_running_loop().time() < deadline:
+            last_received_at = self.last_underlying_message_received_at
+            if last_received_at is not None and last_received_at > recovery_started_at:
+                self.logger.info(
+                    "underlying_feed_recovery_succeeded",
+                    extra={"last_received_at": last_received_at.isoformat()},
+                )
+                self._underlying_recovery_attempted_at = None
+                return True
+            await asyncio.sleep(0.2)
+
+        self.logger.error(
+            "underlying_feed_recovery_failed",
+            extra={
+                "wait_seconds": UNDERLYING_RECOVERY_WAIT_SECONDS,
+                "last_received_at": (
+                    self.last_underlying_message_received_at.isoformat()
+                    if self.last_underlying_message_received_at is not None
+                    else None
+                ),
+            },
+        )
+        return False
 
     def _market_token_ids(self, markets: list[DiscoveredMarket]) -> list[str]:
         return [

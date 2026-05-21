@@ -84,7 +84,7 @@ def test_ensure_underlying_feed_is_fresh_allows_recent_rtds_ticks() -> None:
     service.last_underlying_message_received_at = datetime.now(UTC) - timedelta(seconds=30)
     service.last_underlying_price_tick_time = datetime.now(UTC) - timedelta(seconds=31)
 
-    service._ensure_underlying_feed_is_fresh()
+    asyncio.run(service._ensure_underlying_feed_is_fresh())
 
 
 def test_ensure_underlying_feed_is_fresh_raises_for_stalled_rtds_feed() -> None:
@@ -97,6 +97,22 @@ def test_ensure_underlying_feed_is_fresh_raises_for_stalled_rtds_feed() -> None:
     service.price_feed = PolymarketRtdsPriceFeed("wss://example.invalid", settings.supported_assets)
     service.last_underlying_message_received_at = datetime.now(UTC) - timedelta(seconds=61)
     service.last_underlying_price_tick_time = datetime.now(UTC) - timedelta(seconds=62)
+    service._recover_underlying_feed = AsyncMock(return_value=False)  # type: ignore[method-assign]
 
     with pytest.raises(RuntimeError, match="underlying RTDS feed stalled"):
-        service._ensure_underlying_feed_is_fresh()
+        asyncio.run(service._ensure_underlying_feed_is_fresh())
+
+
+def test_ensure_underlying_feed_is_fresh_recovers_before_raising() -> None:
+    settings = AppSettings(
+        app_mode="record",
+        database_url="sqlite:///:memory:",
+        recorder_underlying_stale_after_seconds=60,
+    )
+    service = RecorderService(settings)
+    service.price_feed = PolymarketRtdsPriceFeed("wss://example.invalid", settings.supported_assets)
+    service.last_underlying_message_received_at = datetime.now(UTC) - timedelta(seconds=61)
+    service.last_underlying_price_tick_time = datetime.now(UTC) - timedelta(seconds=62)
+    service._recover_underlying_feed = AsyncMock(return_value=True)  # type: ignore[method-assign]
+
+    asyncio.run(service._ensure_underlying_feed_is_fresh())

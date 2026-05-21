@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from polymarket_scalper.domain.enums import AssetSymbol
@@ -45,6 +45,33 @@ def test_repository_market_upsert_and_tick_insert() -> None:
         rows = repo.list_active_markets(["BTC"])
         assert len(rows) == 1
         assert rows[0].asset == "BTC"
+
+
+def test_repository_duplicate_underlying_tick_is_ignored() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    tick = UnderlyingPriceTick(
+        asset=AssetSymbol.BTC,
+        symbol="btcusdt",
+        timestamp=datetime(2026, 5, 21, 23, 25, 57, tzinfo=UTC),
+        price=108000.0,
+        provider="polymarket_rtds:binance",
+    )
+
+    with Session(engine) as session:
+        repo = RecorderRepository(session)
+        inserted_first = repo.insert_underlying_price_tick(tick, write_raw_payloads=False)
+        inserted_second = repo.insert_underlying_price_tick(tick, write_raw_payloads=False)
+        session.commit()
+
+        count = session.execute(
+            text("select count(*) from underlying_price_ticks")
+        ).scalar_one()
+
+        assert inserted_first is True
+        assert inserted_second is False
+        assert count == 1
 
 
 def test_repository_deactivate_markets_except_marks_stale_rows_inactive() -> None:

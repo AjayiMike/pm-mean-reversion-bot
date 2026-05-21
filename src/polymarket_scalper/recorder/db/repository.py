@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 
 from sqlalchemy import Select, desc, select
 from sqlalchemy.orm import Session
+from sqlalchemy.dialects.postgresql import insert as postgres_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from polymarket_scalper.recorder.db.models import (
     MarketRecord,
@@ -144,17 +146,36 @@ class RecorderRepository:
         self,
         tick: UnderlyingPriceTick,
         write_raw_payloads: bool,
-    ) -> UnderlyingPriceTickRecord:
-        record = UnderlyingPriceTickRecord(
-            asset=tick.asset.value,
-            symbol=tick.symbol,
-            timestamp=tick.timestamp,
-            price=tick.price,
-            provider=tick.provider,
-            raw_payload_json=tick.raw_payload_json if write_raw_payloads else None,
-        )
+    ) -> bool:
+        values = {
+            "asset": tick.asset.value,
+            "symbol": tick.symbol,
+            "timestamp": tick.timestamp,
+            "price": tick.price,
+            "provider": tick.provider,
+            "raw_payload_json": tick.raw_payload_json if write_raw_payloads else None,
+        }
+        dialect_name = self.session.bind.dialect.name if self.session.bind is not None else ""
+
+        if dialect_name == "postgresql":
+            statement = postgres_insert(UnderlyingPriceTickRecord).values(**values)
+            statement = statement.on_conflict_do_nothing(
+                constraint="uq_tick_asset_time_provider"
+            )
+            result = self.session.execute(statement)
+            return bool(result.rowcount)
+
+        if dialect_name == "sqlite":
+            statement = sqlite_insert(UnderlyingPriceTickRecord).values(**values)
+            statement = statement.on_conflict_do_nothing(
+                index_elements=["asset", "timestamp", "provider"]
+            )
+            result = self.session.execute(statement)
+            return bool(result.rowcount)
+
+        record = UnderlyingPriceTickRecord(**values)
         self.session.add(record)
-        return record
+        return True
 
     def create_run(self, assets: list[str]) -> RecorderRunRecord:
         record = RecorderRunRecord(status="running", assets=",".join(assets))
