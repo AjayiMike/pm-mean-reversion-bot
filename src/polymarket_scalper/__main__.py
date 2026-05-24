@@ -7,6 +7,9 @@ import signal
 
 from polymarket_scalper.config.settings import AppSettings
 from polymarket_scalper.domain.enums import BotMode
+from polymarket_scalper.domain.enums import AssetSymbol
+from polymarket_scalper.recorder.db.session import DatabaseSessionFactory
+from polymarket_scalper.recorder.services.audit import RecorderAuditService, format_audit_report
 from polymarket_scalper.recorder.services.recorder import RecorderService
 from polymarket_scalper.utils.logging import configure_logging, get_logger, log_settings_summary
 
@@ -16,8 +19,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "command",
         nargs="?",
-        choices=["spec", "discover", "record", "record-once", "health"],
+        choices=["spec", "discover", "record", "record-once", "health", "audit"],
     )
+    parser.add_argument("--hours", type=int, default=24, help="Lookback window for audit output")
+    parser.add_argument("--limit", type=int, default=50, help="Max markets to audit")
+    parser.add_argument(
+        "--asset",
+        choices=[asset.value for asset in AssetSymbol],
+        help="Restrict audit to a single asset",
+    )
+    parser.add_argument("--json", action="store_true", dest="json_output", help="Emit JSON output")
     return parser
 
 
@@ -124,6 +135,21 @@ def main() -> None:
         service = RecorderService(settings)
         health = asyncio.run(service.health())
         print(json.dumps(health.model_dump(mode="json"), indent=2, default=str))
+        return
+
+    if command == "audit":
+        if settings.database_url is None:
+            parser.error("DATABASE_URL is required for the audit command")
+        session_factory = DatabaseSessionFactory(settings.database_url)
+        report = RecorderAuditService(session_factory).build_report(
+            lookback_hours=args.hours,
+            limit=args.limit,
+            asset=args.asset,
+        )
+        if args.json_output:
+            print(json.dumps(report.model_dump(mode="json"), indent=2, default=str))
+            return
+        print(format_audit_report(report))
         return
 
     parser.error(f"unsupported command: {command}")

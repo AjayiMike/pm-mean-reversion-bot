@@ -23,6 +23,9 @@ record:
 health:
 	$(PYTHON) -m polymarket_scalper health
 
+audit:
+	$(PYTHON) -m polymarket_scalper audit
+
 db-up:
 	docker compose up -d postgres
 
