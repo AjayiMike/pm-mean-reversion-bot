@@ -9,7 +9,11 @@ from polymarket_scalper.config.settings import AppSettings
 from polymarket_scalper.domain.enums import BotMode
 from polymarket_scalper.domain.enums import AssetSymbol
 from polymarket_scalper.recorder.db.session import DatabaseSessionFactory
-from polymarket_scalper.recorder.services.audit import RecorderAuditService, format_audit_report
+from polymarket_scalper.recorder.services.audit import (
+    AuditThresholds,
+    RecorderAuditService,
+    format_audit_report,
+)
 from polymarket_scalper.recorder.services.recorder import RecorderService
 from polymarket_scalper.utils.logging import configure_logging, get_logger, log_settings_summary
 
@@ -29,6 +33,41 @@ def build_parser() -> argparse.ArgumentParser:
         help="Restrict audit to a single asset",
     )
     parser.add_argument("--json", action="store_true", dest="json_output", help="Emit JSON output")
+    parser.add_argument(
+        "--max-snapshot-gap-seconds",
+        type=int,
+        default=5,
+        help="Maximum allowed gap between consecutive market snapshots",
+    )
+    parser.add_argument(
+        "--max-underlying-gap-seconds",
+        type=int,
+        default=30,
+        help="Maximum allowed gap between consecutive underlying ticks",
+    )
+    parser.add_argument(
+        "--max-start-lag-seconds",
+        type=int,
+        default=30,
+        help="Maximum allowed lag from market start to first snapshot or underlying tick",
+    )
+    parser.add_argument(
+        "--max-end-lag-seconds",
+        type=int,
+        default=5,
+        help="Maximum allowed lag from market end to last snapshot",
+    )
+    parser.add_argument(
+        "--max-underlying-end-lag-seconds",
+        type=int,
+        default=30,
+        help="Maximum allowed lag from market end to last underlying tick",
+    )
+    parser.add_argument(
+        "--allow-missing-close-price",
+        action="store_true",
+        help="Do not flag closed markets that are missing close_price",
+    )
     return parser
 
 
@@ -141,10 +180,20 @@ def main() -> None:
         if settings.database_url is None:
             parser.error("DATABASE_URL is required for the audit command")
         session_factory = DatabaseSessionFactory(settings.database_url)
+        thresholds = AuditThresholds(
+            snapshot_start_lag_seconds=args.max_start_lag_seconds,
+            snapshot_end_lag_seconds=args.max_end_lag_seconds,
+            snapshot_max_gap_seconds=args.max_snapshot_gap_seconds,
+            underlying_start_lag_seconds=args.max_start_lag_seconds,
+            underlying_end_lag_seconds=args.max_underlying_end_lag_seconds,
+            underlying_max_gap_seconds=args.max_underlying_gap_seconds,
+            require_close_price=not args.allow_missing_close_price,
+        )
         report = RecorderAuditService(session_factory).build_report(
             lookback_hours=args.hours,
             limit=args.limit,
             asset=args.asset,
+            thresholds=thresholds,
         )
         if args.json_output:
             print(json.dumps(report.model_dump(mode="json"), indent=2, default=str))

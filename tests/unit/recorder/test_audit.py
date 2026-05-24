@@ -9,7 +9,7 @@ from polymarket_scalper.domain.enums import AssetSymbol
 from polymarket_scalper.recorder.db.base import Base
 from polymarket_scalper.recorder.db.repository import RecorderRepository
 from polymarket_scalper.recorder.db.session import DatabaseSessionFactory
-from polymarket_scalper.recorder.services.audit import RecorderAuditService
+from polymarket_scalper.recorder.services.audit import AuditThresholds, RecorderAuditService
 from polymarket_scalper.recorder.services.models import (
     DiscoveredMarket,
     NormalizedMarketSnapshot,
@@ -282,3 +282,110 @@ def test_audit_report_marks_complete_windows_usable(tmp_path) -> None:
     assert row.quality == "usable"
     assert row.usable is True
     assert row.flags == []
+
+
+def test_audit_report_thresholds_are_configurable(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'audit-thresholds.sqlite'}"
+    engine = create_engine(database_url)
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        repo = RecorderRepository(session)
+        run = repo.create_run(["BTC"])
+        session.flush()
+        run.started_at = datetime(2026, 5, 24, 12, 0, 0, tzinfo=UTC)
+        repo.finish_run(
+            run.id,
+            status="completed",
+            markets_discovered=1,
+            snapshots_written=2,
+        )
+        run.stopped_at = datetime(2026, 5, 24, 12, 15, 5, tzinfo=UTC)
+
+        market = DiscoveredMarket(
+            id="market-thresholds",
+            question="BTC 15-minute market: up or down?",
+            asset=AssetSymbol.BTC,
+            slug="btc-updown-15m-thresholds",
+            start_time=datetime(2026, 5, 24, 12, 0, tzinfo=UTC),
+            end_time=datetime(2026, 5, 24, 12, 15, tzinfo=UTC),
+            opening_price=108000.0,
+            opening_price_source="frontend",
+            close_price=108100.0,
+            close_price_source="frontend",
+            up_token_id="up-token-thresholds",
+            down_token_id="down-token-thresholds",
+            active=False,
+            closed=True,
+        )
+        repo.upsert_market(market)
+        repo.insert_market_snapshot(
+            NormalizedMarketSnapshot(
+                market_id="market-thresholds",
+                timestamp=datetime(2026, 5, 24, 12, 0, 5, tzinfo=UTC),
+                asset="BTC",
+                opening_price=108000.0,
+                underlying_price=108001.0,
+                time_remaining_seconds=895,
+                source="test",
+            )
+        )
+        repo.insert_market_snapshot(
+            NormalizedMarketSnapshot(
+                market_id="market-thresholds",
+                timestamp=datetime(2026, 5, 24, 12, 14, 55, tzinfo=UTC),
+                asset="BTC",
+                opening_price=108000.0,
+                underlying_price=108002.0,
+                time_remaining_seconds=5,
+                source="test",
+            )
+        )
+        for tick_time in (
+            datetime(2026, 5, 24, 12, 0, 5, tzinfo=UTC),
+            datetime(2026, 5, 24, 12, 14, 55, tzinfo=UTC),
+        ):
+            repo.insert_underlying_price_tick(
+                UnderlyingPriceTick(
+                    asset=AssetSymbol.BTC,
+                    symbol="btcusdt",
+                    timestamp=tick_time,
+                    price=108000.0,
+                    provider="mock",
+                ),
+                write_raw_payloads=False,
+            )
+        repo.insert_order_book_snapshot(
+            "market-thresholds",
+            NormalizedOrderBookState(
+                token_id="up-token-thresholds",
+                side_label="UP",
+                timestamp=datetime(2026, 5, 24, 12, 0, 5, tzinfo=UTC),
+                bids=[OrderBookLevel(price=0.4, size=100)],
+                asks=[OrderBookLevel(price=0.41, size=120)],
+            ),
+            write_raw_payloads=False,
+        )
+        session.commit()
+
+    strict_report = RecorderAuditService(DatabaseSessionFactory(database_url)).build_report(
+        lookback_hours=24,
+        limit=10,
+    )
+    relaxed_report = RecorderAuditService(DatabaseSessionFactory(database_url)).build_report(
+        lookback_hours=24,
+        limit=10,
+        thresholds=AuditThresholds(
+            snapshot_start_lag_seconds=30,
+            snapshot_end_lag_seconds=5,
+            snapshot_max_gap_seconds=1000,
+            underlying_start_lag_seconds=30,
+            underlying_end_lag_seconds=30,
+            underlying_max_gap_seconds=1000,
+            require_close_price=True,
+        ),
+    )
+
+    assert strict_report.rows[0].usable is False
+    assert any(flag.startswith("snapshot_gap_gt_") for flag in strict_report.rows[0].flags)
+    assert relaxed_report.rows[0].usable is True

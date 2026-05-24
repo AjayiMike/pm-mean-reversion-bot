@@ -70,6 +70,18 @@ class MarketWindowAuditReport(BaseModel):
     rows: list[MarketWindowAuditRow]
 
 
+class AuditThresholds(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    snapshot_start_lag_seconds: int = SNAPSHOT_START_LAG_THRESHOLD_SECONDS
+    snapshot_end_lag_seconds: int = SNAPSHOT_END_LAG_THRESHOLD_SECONDS
+    snapshot_max_gap_seconds: int = SNAPSHOT_MAX_GAP_THRESHOLD_SECONDS
+    underlying_start_lag_seconds: int = UNDERLYING_START_LAG_THRESHOLD_SECONDS
+    underlying_end_lag_seconds: int = UNDERLYING_END_LAG_THRESHOLD_SECONDS
+    underlying_max_gap_seconds: int = UNDERLYING_MAX_GAP_THRESHOLD_SECONDS
+    require_close_price: bool = True
+
+
 class RecorderAuditService:
     def __init__(self, session_factory: DatabaseSessionFactory) -> None:
         self.session_factory = session_factory
@@ -79,10 +91,12 @@ class RecorderAuditService:
         lookback_hours: int = 24,
         limit: int = 50,
         asset: str | None = None,
+        thresholds: AuditThresholds | None = None,
     ) -> MarketWindowAuditReport:
         now = datetime.now(UTC)
         since = now - timedelta(hours=lookback_hours)
         asset_filter = asset.upper() if asset is not None else None
+        active_thresholds = thresholds or AuditThresholds()
 
         with self.session_factory.session() as session:
             stmt = (
@@ -110,6 +124,7 @@ class RecorderAuditService:
                     orderbook_stat=orderbook_stats.get(market.id),
                     runs=runs,
                     now=now,
+                    thresholds=active_thresholds,
                 )
                 for market in market_records
             ]
@@ -181,6 +196,7 @@ class RecorderAuditService:
         orderbook_stat: tuple[int, datetime | None, datetime | None] | None,
         runs: list[RecorderRunRecord],
         now: datetime,
+        thresholds: AuditThresholds,
     ) -> MarketWindowAuditRow:
         snapshot_count, first_snapshot, last_snapshot = snapshot_stat or (0, None, None)
         orderbook_count, first_orderbook, last_orderbook = orderbook_stat or (0, None, None)
@@ -239,29 +255,39 @@ class RecorderAuditService:
             flags.append("missing_orderbooks")
         if underlying_tick_count == 0:
             flags.append("missing_underlying_ticks")
-        if market.closed and market.close_price is None:
+        if thresholds.require_close_price and market.closed and market.close_price is None:
             flags.append("missing_close_price")
-        if start_lag_seconds is not None and start_lag_seconds > SNAPSHOT_START_LAG_THRESHOLD_SECONDS:
-            flags.append("start_lag_gt_30s")
-        if end_lag_seconds is not None and end_lag_seconds > SNAPSHOT_END_LAG_THRESHOLD_SECONDS:
-            flags.append("end_lag_gt_5s")
-        if max_snapshot_gap_seconds is not None and max_snapshot_gap_seconds > SNAPSHOT_MAX_GAP_THRESHOLD_SECONDS:
-            flags.append("snapshot_gap_gt_5s")
+        if (
+            start_lag_seconds is not None
+            and start_lag_seconds > thresholds.snapshot_start_lag_seconds
+        ):
+            flags.append(f"start_lag_gt_{thresholds.snapshot_start_lag_seconds}s")
+        if end_lag_seconds is not None and end_lag_seconds > thresholds.snapshot_end_lag_seconds:
+            flags.append(f"end_lag_gt_{thresholds.snapshot_end_lag_seconds}s")
+        if (
+            max_snapshot_gap_seconds is not None
+            and max_snapshot_gap_seconds > thresholds.snapshot_max_gap_seconds
+        ):
+            flags.append(f"snapshot_gap_gt_{thresholds.snapshot_max_gap_seconds}s")
         if (
             underlying_start_lag_seconds is not None
-            and underlying_start_lag_seconds > UNDERLYING_START_LAG_THRESHOLD_SECONDS
+            and underlying_start_lag_seconds > thresholds.underlying_start_lag_seconds
         ):
-            flags.append("underlying_start_lag_gt_30s")
+            flags.append(
+                f"underlying_start_lag_gt_{thresholds.underlying_start_lag_seconds}s"
+            )
         if (
             underlying_end_lag_seconds is not None
-            and underlying_end_lag_seconds > UNDERLYING_END_LAG_THRESHOLD_SECONDS
+            and underlying_end_lag_seconds > thresholds.underlying_end_lag_seconds
         ):
-            flags.append("underlying_end_lag_gt_30s")
+            flags.append(
+                f"underlying_end_lag_gt_{thresholds.underlying_end_lag_seconds}s"
+            )
         if (
             max_underlying_gap_seconds is not None
-            and max_underlying_gap_seconds > UNDERLYING_MAX_GAP_THRESHOLD_SECONDS
+            and max_underlying_gap_seconds > thresholds.underlying_max_gap_seconds
         ):
-            flags.append("underlying_gap_gt_30s")
+            flags.append(f"underlying_gap_gt_{thresholds.underlying_max_gap_seconds}s")
         if interval_end is not None and interval_end <= now and covering_run_count != 1:
             flags.append("run_coverage_gap")
         if overlapping_run_count > 1:
