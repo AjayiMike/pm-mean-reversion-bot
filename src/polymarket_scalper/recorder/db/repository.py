@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import Select, desc, select
-from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.orm import Session
 
 from polymarket_scalper.recorder.db.models import (
     MarketRecord,

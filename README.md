@@ -1,6 +1,8 @@
 # Polymarket 15-Minute Crypto Scalper
 
-Phase 2 builds a market data recorder for Polymarket 15-minute crypto prediction markets. Phase 2 records public market data only. It does not trade. It does not require private keys. It does not require builder credentials.
+Phase 1, Phase 2, and Phase 2.5 are complete. The next phase is Phase 3: offline replay/backtesting.
+
+Phase 2 built a market data recorder for Polymarket 15-minute crypto prediction markets. Phase 2.5 added a strict data-audit layer for deciding which recorded windows are safe to replay. The project still does not trade. It does not require private keys. It does not require builder credentials.
 
 ## Strategy Summary
 
@@ -12,7 +14,15 @@ The bot is designed to scalp pre-expiry odds movement. It is not designed to hol
 
 ## Current Phase
 
-Phase 2 only:
+Completed phases:
+- Phase 1
+- Phase 2
+- Phase 2.5
+
+Next phase:
+- Phase 3 offline replay/backtesting
+
+Current implemented scope:
 - public current-market discovery with rollover to the next live quarter-hour market
 - public Polymarket market-data listener scaffolding
 - underlying crypto price feed abstraction
@@ -38,6 +48,22 @@ Intentionally not implemented yet:
 - `docs/market-data-recorder.md`: Phase 2 recorder design and operations
 - `docs/operations-runbook.md`: local and Docker commands
 - `docs/development-roadmap.md`: phase sequence
+
+## Agent Context / Handoff
+
+This repo uses repo-based memory files so work can continue across Codex, Cursor, Claude Code, and other coding agents.
+
+Agents should read:
+- `AGENTS.md`
+- `HANDOFF.md`
+- `TASKS.md`
+- `DECISIONS.md`
+- `docs/adr/`
+
+Before stopping, agents should update:
+- `HANDOFF.md`
+- `TASKS.md`
+- `DECISIONS.md` or ADRs if a meaningful decision was made
 
 ## Setup
 

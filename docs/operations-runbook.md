@@ -150,3 +150,30 @@ Production guardrails:
 - if you need DBeaver or psql access from your laptop, bind PostgreSQL to `127.0.0.1:5432` on the server and use SSH tunneling
 - use a strong `POSTGRES_PASSWORD`
 - access the database through SSH tunneling if manual inspection is needed
+
+## Agent Handoff Workflow
+
+Before work, agents should read:
+- `AGENTS.md`
+- `HANDOFF.md`
+- `TASKS.md`
+- `DECISIONS.md`
+- `docs/adr/`
+- relevant phase docs
+
+Before stopping, agents should update:
+- `HANDOFF.md`
+- `TASKS.md`
+- `DECISIONS.md` or ADRs if a meaningful decision was made
+
+A good handoff should capture:
+- current objective
+- current phase status
+- what was completed
+- what remains incomplete
+- important files and commands
+- tests run and results
+- production notes or watchouts
+- the next recommended step
+
+This workflow exists so Codex, Cursor, Claude Code, and other agents can continue from repository state instead of relying on previous chat history. Generated reports or raw logs are not the source of truth unless they are intentionally summarized into the repo-memory files above.

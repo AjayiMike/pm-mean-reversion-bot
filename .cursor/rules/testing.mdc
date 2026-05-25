@@ -1,0 +1,6 @@
+# Testing
+
+- Run relevant tests before claiming completion.
+- Use existing Makefile commands where possible.
+- Tests must not require real network calls unless explicitly integration/manual.
+- Update handoff with tests run and results.

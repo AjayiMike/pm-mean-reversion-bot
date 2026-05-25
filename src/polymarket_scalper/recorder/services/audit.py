@@ -107,14 +107,16 @@ class RecorderAuditService:
             )
             if asset_filter is not None:
                 stmt = stmt.where(MarketRecord.asset == asset_filter)
-            market_records = list(
-                session.scalars(stmt)
-            )
+            market_records = list(session.scalars(stmt))
 
             market_ids = [record.id for record in market_records]
             snapshot_stats = self._snapshot_stats(session, market_ids)
             orderbook_stats = self._orderbook_stats(session, market_ids)
-            runs = list(session.scalars(select(RecorderRunRecord).order_by(RecorderRunRecord.started_at)))
+            runs = list(
+                session.scalars(
+                    select(RecorderRunRecord).order_by(RecorderRunRecord.started_at)
+                )
+            )
 
             rows = [
                 self._build_row(
@@ -150,7 +152,11 @@ class RecorderAuditService:
             rows=rows,
         )
 
-    def _snapshot_stats(self, session, market_ids: list[str]) -> dict[str, tuple[int, datetime | None, datetime | None]]:
+    def _snapshot_stats(
+        self,
+        session,
+        market_ids: list[str],
+    ) -> dict[str, tuple[int, datetime | None, datetime | None]]:
         if not market_ids:
             return {}
 
@@ -169,7 +175,11 @@ class RecorderAuditService:
             for market_id, count, first_snapshot, last_snapshot in rows
         }
 
-    def _orderbook_stats(self, session, market_ids: list[str]) -> dict[str, tuple[int, datetime | None, datetime | None]]:
+    def _orderbook_stats(
+        self,
+        session,
+        market_ids: list[str],
+    ) -> dict[str, tuple[int, datetime | None, datetime | None]]:
         if not market_ids:
             return {}
 
@@ -204,7 +214,12 @@ class RecorderAuditService:
         interval_start = _normalize_utc(market.start_time)
         interval_end = _normalize_utc(market.end_time)
         effective_end = interval_end or now
-        snapshot_timestamps = self._market_snapshot_timestamps(session, market.id, interval_start, effective_end)
+        snapshot_timestamps = self._market_snapshot_timestamps(
+            session,
+            market.id,
+            interval_start,
+            effective_end,
+        )
         underlying_timestamps = self._underlying_tick_timestamps(
             session,
             market.asset,
@@ -220,12 +235,18 @@ class RecorderAuditService:
                 run_stop = _normalize_utc(run.stopped_at) or now
                 if run_start <= effective_end and run_stop >= interval_start:
                     overlapping_run_count += 1
-                if interval_end is not None and run_start <= interval_start and run_stop >= interval_end:
+                if (
+                    interval_end is not None
+                    and run_start <= interval_start
+                    and run_stop >= interval_end
+                ):
                     covering_run_count += 1
 
         start_lag_seconds = None
         if interval_start is not None and first_snapshot is not None:
-            start_lag_seconds = int((_normalize_utc(first_snapshot) - interval_start).total_seconds())
+            start_lag_seconds = int(
+                (_normalize_utc(first_snapshot) - interval_start).total_seconds()
+            )
 
         end_lag_seconds = None
         if interval_end is not None and last_snapshot is not None and interval_end <= now:
@@ -237,7 +258,9 @@ class RecorderAuditService:
 
         underlying_start_lag_seconds = None
         if interval_start is not None and first_underlying_tick is not None:
-            underlying_start_lag_seconds = int((first_underlying_tick - interval_start).total_seconds())
+            underlying_start_lag_seconds = int(
+                (first_underlying_tick - interval_start).total_seconds()
+            )
 
         underlying_end_lag_seconds = None
         if interval_end is not None and last_underlying_tick is not None and interval_end <= now:
@@ -262,7 +285,10 @@ class RecorderAuditService:
             and start_lag_seconds > thresholds.snapshot_start_lag_seconds
         ):
             flags.append(f"start_lag_gt_{thresholds.snapshot_start_lag_seconds}s")
-        if end_lag_seconds is not None and end_lag_seconds > thresholds.snapshot_end_lag_seconds:
+        if (
+            end_lag_seconds is not None
+            and end_lag_seconds > thresholds.snapshot_end_lag_seconds
+        ):
             flags.append(f"end_lag_gt_{thresholds.snapshot_end_lag_seconds}s")
         if (
             max_snapshot_gap_seconds is not None
@@ -431,7 +457,10 @@ def _fmt_optional_int(value: int | None) -> str:
 def _max_gap_seconds(timestamps: list[datetime]) -> int | None:
     if len(timestamps) < 2:
         return None
-    return max(int((later - earlier).total_seconds()) for earlier, later in zip(timestamps, timestamps[1:]))
+    return max(
+        int((later - earlier).total_seconds())
+        for earlier, later in zip(timestamps, timestamps[1:], strict=False)
+    )
 
 
 def _normalize_utc(value: datetime | None) -> datetime | None:

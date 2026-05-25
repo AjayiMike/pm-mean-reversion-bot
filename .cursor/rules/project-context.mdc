@@ -1,0 +1,7 @@
+# Project Context
+
+- This is a Polymarket 15-minute crypto mean-reversion bot.
+- `AGENTS.md` is canonical.
+- Read `HANDOFF.md`, `TASKS.md`, `DECISIONS.md`, and `docs/adr/` before work.
+- Current next phase is Phase 3 backtesting.
+- Do not jump phases.

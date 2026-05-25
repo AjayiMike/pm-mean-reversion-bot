@@ -1,0 +1,7 @@
+# Security
+
+- Never commit `.env`.
+- Never log private keys or builder credentials.
+- Do not expose PostgreSQL publicly.
+- Do not require trading credentials before the live trading phase.
+- Do not add live trading code unless explicitly requested in the correct phase.

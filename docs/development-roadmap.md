@@ -34,9 +34,36 @@ Output:
 Conditions for moving to the next phase:
 - at least 500 completed markets recorded with acceptable data quality
 
+## 2.5. Recorder Data Audit
+
+Objective: classify recorded market windows by quality before replay uses them.
+
+What to build:
+- recorder data-audit command
+- strict default quality thresholds
+- per-market quality classification
+- asset-filtered audit views
+- configurable thresholds for diagnostics only
+
+Output:
+- auditable `usable`, `flagged`, and `active` market windows
+- a strict canonical dataset gate for Phase 3
+
+Conditions for moving to the next phase:
+- strict audited usable windows are available for replay
+- known recorder quality gaps are understood and documented
+- repo-memory / handoff workflow is in place for cross-agent continuity
+
+Status:
+- complete
+
 ## 3. Backtesting/Replay Engine
 
 Objective: replay recorded markets and simulate realistic execution.
+
+Repo-memory / handoff workflow was added before Phase 3 so future agents can continue safely across Codex, Cursor, Claude Code, and other tools.
+
+Phase 3 must consume strict audited `usable=true` completed windows by default. Raw recorder output is not the canonical replay dataset.
 
 What to build:
 - historical replay engine

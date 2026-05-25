@@ -6,8 +6,7 @@ import json
 import signal
 
 from polymarket_scalper.config.settings import AppSettings
-from polymarket_scalper.domain.enums import BotMode
-from polymarket_scalper.domain.enums import AssetSymbol
+from polymarket_scalper.domain.enums import AssetSymbol, BotMode
 from polymarket_scalper.recorder.db.session import DatabaseSessionFactory
 from polymarket_scalper.recorder.services.audit import (
     AuditThresholds,
